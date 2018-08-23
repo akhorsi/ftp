@@ -9,9 +9,12 @@ import (
 	"io"
 	"net"
 	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 )
 
 // EntryType describes the different types of an Entry.
@@ -60,6 +63,21 @@ func Connect(addr string) (*ServerConn, error) {
 	return Dial(addr)
 }
 
+// Dial by a proxy with no timeout
+func DialProxy(u *url.URL, addr string) (*ServerConn, error) {
+	dialer, err := proxy.FromURL(u, proxy.Direct)
+	if err != nil {
+		return nil, err
+	}
+
+	tconn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	return setupServerCon(tconn, 0)
+}
+
 // Dial is like DialTimeout with no timeout
 func Dial(addr string) (*ServerConn, error) {
 	return DialTimeout(addr, 0)
@@ -75,6 +93,10 @@ func DialTimeout(addr string, timeout time.Duration) (*ServerConn, error) {
 		return nil, err
 	}
 
+	return setupServerCon(tconn, timeout)
+}
+
+func setupServerCon(tconn net.Conn, timeout time.Duration) (*ServerConn, error) {
 	// Use the resolved IP address in case addr contains a domain name
 	// If we use the domain name, we might not resolve to the same IP.
 	remoteAddr := tconn.RemoteAddr().(*net.TCPAddr)
@@ -89,7 +111,7 @@ func DialTimeout(addr string, timeout time.Duration) (*ServerConn, error) {
 		Location: time.UTC,
 	}
 
-	_, _, err = c.conn.ReadResponse(StatusReady)
+	_, _, err := c.conn.ReadResponse(StatusReady)
 	if err != nil {
 		c.Quit()
 		return nil, err
@@ -188,10 +210,10 @@ func (c *ServerConn) setUTF8() error {
 		return err
 	}
 
-        // Workaround for FTP servers, that does not support this option.
-        if code == StatusBadArguments {
-                return nil
-        }
+	// Workaround for FTP servers, that does not support this option.
+	if code == StatusBadArguments {
+		return nil
+	}
 
 	// The ftpd "filezilla-server" has FEAT support for UTF8, but always returns
 	// "202 UTF8 mode is always enabled. No need to send this command." when
