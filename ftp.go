@@ -8,13 +8,12 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/net/proxy"
 )
 
 // EntryType describes the different types of an Entry.
@@ -64,13 +63,12 @@ func Connect(addr string) (*ServerConn, error) {
 }
 
 // Dial by a proxy with no timeout
-func DialProxy(u *url.URL, addr string) (*ServerConn, error) {
-	dialer, err := proxy.FromURL(u, proxy.Direct)
-	if err != nil {
-		return nil, err
+func DialHTTPProxy(u *url.URL, addr string) (*ServerConn, error) {
+	t := http.Transport{
+		Proxy: http.ProxyURL(u),
 	}
 
-	tconn, err := dialer.Dial("tcp", addr)
+	tconn, err := t.Dial("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
